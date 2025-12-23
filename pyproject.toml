@@ -1,0 +1,22 @@
+[project]
+name = "workoutapi"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "eduferrs",email = "118932789+eduferrs@users.noreply.github.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi (>=0.127.0,<0.128.0)",
+    "uvicorn (>=0.40.0,<0.41.0)",
+    "sqlalchemy (>=2.0.45,<3.0.0)",
+    "pydantic (>=2.12.5,<3.0.0)"
+]
+
+[tool.poetry]
+packages = [{include = "workoutapi", from = "src"}]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
