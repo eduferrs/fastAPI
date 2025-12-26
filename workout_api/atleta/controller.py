@@ -1,9 +1,11 @@
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import uuid4
-from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Body, HTTPException, status
+from fastapi import APIRouter, Body, HTTPException, Query, status
+from fastapi_pagination import Page
+from fastapi_pagination.ext.sqlalchemy import paginate
 from pydantic import UUID4
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.future import select
 from workout_api.atleta.models import AtletaModel
 from workout_api.atleta.schemas import *
@@ -46,6 +48,11 @@ async def post(db_session: DatabaseDependency, atleta_in: AtletaIn = Body(...)):
 
         db_session.add(atleta_model)
         await db_session.commit()
+    except IntegrityError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Já existe um atleta cadastrado com o cpf {atleta_model.cpf}",
+        )
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Ocorreu um erro ao inserir os dados no banco"
@@ -55,12 +62,42 @@ async def post(db_session: DatabaseDependency, atleta_in: AtletaIn = Body(...)):
 
 
 @router.get(
-    path="/", summary="Consultar todos os atletas", status_code=status.HTTP_200_OK, response_model=list[AtletaOut]
+    path="/", summary="Consultar todos os atletas", status_code=status.HTTP_200_OK, response_model=Page[AtletaBasicOut]
 )
-async def query(db_session: DatabaseDependency) -> list[AtletaOut]:
-    atletas: list[AtletaOut] = (await db_session.execute(select(AtletaModel))).scalars().all()
+async def query(db_session: DatabaseDependency) -> Page[AtletaBasicOut]:
 
-    return [AtletaOut.model_validate(atleta) for atleta in atletas]
+    query = select(AtletaModel)
+    return await paginate(db_session, query)
+
+
+@router.get(
+    path="/search",
+    summary="Filtrar atleta por nome e/ou cpf",
+    status_code=status.HTTP_200_OK,
+    response_model=list[AtletaOut],
+)
+async def query_atletas(
+    db_session: DatabaseDependency,
+    nome: Annotated[str | None, Query(description="Nome do atleta", example="João")] = None,
+    cpf: Annotated[str | None, Query(description="CPF do atleta", example="12345678900")] = None,
+) -> list[AtletaOut]:
+
+    if not nome and not cpf:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Escreva ao menos 1 dos parâmetros (nome ou cpf) para concluir o filtro",
+        )
+
+    query = select(AtletaModel)
+
+    if nome:
+        query = query.filter(AtletaModel.nome == nome)
+    if cpf:
+        query = query.filter(AtletaModel.cpf == cpf)
+
+    atletas = (await db_session.execute(query)).scalars().all()
+
+    return atletas
 
 
 @router.get(path="/{id}", summary="Consultar atleta pelo id", status_code=status.HTTP_200_OK, response_model=AtletaOut)
